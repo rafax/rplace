@@ -6,18 +6,21 @@ import (
 	"image/png"
 	"os"
 	"testing"
-
-	"github.com/rafax/rplace"
 )
 
 func Test_toPng(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 1000, 1000))
 	for i := 0; i < 1000*1000; i++ {
 		var c color.NRGBA
-		if i%2 == 0 {
-			c = rplace.White
-		} else {
-			c = rplace.Black
+		switch i % 4 {
+		case 0:
+			c = White
+		case 1:
+			c = LightGray
+		case 2:
+			c = DarkGray
+		case 3:
+			c = Black
 		}
 		img.Set(i%1000, i/1000, c)
 	}
@@ -29,7 +32,6 @@ func Test_toPng(t *testing.T) {
 
 	if err := png.Encode(f, img); err != nil {
 		f.Close()
-
 		t.Fatal(err)
 	}
 
