@@ -12,6 +12,20 @@ import (
 	"time"
 )
 
+func Test_GetAfterSet(t *testing.T) {
+	s := NewMemoryStore()
+	p := Pixel{X: rand.Int() % 1000, Y: rand.Int() % 1000, C: LightGray}
+	s.Set(p, strconv.Itoa(rand.Int()))
+	written := s.Get(p.X, p.Y)
+	if written.C != p.C {
+		t.Errorf("Expected Get() to return what was Set() but %v != %v", written.C, p.C)
+	}
+	i := s.GetImage()
+	if i.At(p.X, p.Y) != p.C {
+		t.Errorf("Expected GetImage() to return what was Set() but %v != %v", written.C, p.C)
+	}
+}
+
 func Test_toPng(t *testing.T) {
 	img := image.NewNRGBA(image.Rect(0, 0, 1000, 1000))
 	for i := 0; i < 1000*1000; i++ {

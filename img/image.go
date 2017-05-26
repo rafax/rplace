@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"log"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -43,12 +45,13 @@ var (
 	Colors    = []color.NRGBA{Black, White, LightGray, DarkGray}
 )
 
+type UserRateLimitedError error
+
 type MemoryStore struct {
 	pixels     []PixelWrite
-	userWrites map[string]int64 // contains index of write in pixels
+	userWrites map[string]int // contains index of write in pixels
 	seq        uint64
-	lock       sync.Mutex
-	seqLock    sync.Mutex
+	lock       sync.RWMutex
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -58,37 +61,39 @@ func NewMemoryStore() *MemoryStore {
 			pixels[i*Size+j] = PixelWrite{Pixel: Pixel{X: i, Y: j, C: White}}
 		}
 	}
-	return &MemoryStore{pixels: pixels, userWrites: map[string]int64{}}
+	return &MemoryStore{pixels: pixels, userWrites: map[string]int{}}
 }
 
 func (s *MemoryStore) Set(p Pixel, userID string) (*PixelWrite, error) {
 	now := time.Now()
 	if ind, ok := s.userWrites[userID]; ok {
+		log.Println("User write found " + userID)
 		w := s.pixels[ind]
 		cooldownEndsAt := w.WrittenAt.Add(cooldownPeriod)
 		if time.Now().After(cooldownEndsAt) {
-			return nil, fmt.Errorf("Cooldown period has not passed, wait %s", cooldownEndsAt.Sub(now))
+			log.Println(w, cooldownEndsAt)
+			return nil, UserRateLimitedError(fmt.Errorf("Cooldown period has not passed, wait %s", cooldownEndsAt.Sub(now)))
 		}
 	}
-	s.seqLock.Lock()
-	s.seq++
-	seq := s.seq
-	s.seqLock.Unlock()
+	ind := p.Y*Size + p.X
+	seq := atomic.AddUint64(&s.seq, 1)
 	pw := PixelWrite{Pixel: p, Sequence: seq, UserID: userID, WrittenAt: now}
-	s.pixels[p.Y*Size+p.X] = pw
+	s.lock.Lock()
+	s.pixels[ind] = pw
+	s.userWrites[userID] = ind
+	s.lock.Lock()
 	return &pw, nil
 }
 
 func (s *MemoryStore) Get(x, y int) *PixelWrite {
+	s.lock.RLock()
 	return &s.pixels[y*Size+x]
+	s.lock.RUnlock()
 }
-func (s *MemoryStore) GetImage() image.Image {
-	// TODO: add a helper that takes an array of colors and return an image.
-	img := image.NewNRGBA(image.Rect(0, Size, 0, Size))
-	for i := 0; i < Size; i++ {
-		for j := 0; j < Size; j++ {
-			img.SetNRGBA(i, j, s.pixels[j*Size+i].Pixel.C)
-		}
+func (s *MemoryStore) GetImage() *image.NRGBA {
+	res := image.NewNRGBA(image.Rect(0, 0, Size, Size))
+	for i, pw := range s.pixels {
+		res.SetNRGBA(i%1000, i/1000, pw.Pixel.C)
 	}
-	return img
+	return res
 }
