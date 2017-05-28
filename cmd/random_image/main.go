@@ -14,8 +14,8 @@ import (
 
 func main() {
 	var wg sync.WaitGroup
-	total := 1000 * 100
-	workers := 10
+	total := 1000 * 1000
+	workers := 100
 	wg.Add(total)
 	sem := make(chan int, workers)
 	cnt := int64(total)
