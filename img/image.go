@@ -4,13 +4,12 @@ import (
 	"fmt"
 	"image"
 	"image/color"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 )
 
-const cooldownPeriod = 5 * time.Minute
+const cooldownPeriod = 1 * time.Minute
 
 const Size = 1000
 
@@ -48,10 +47,10 @@ var (
 type UserRateLimitedError error
 
 type MemoryStore struct {
-	pixels     []PixelWrite
-	userWrites map[string]int // contains index of write in pixels
-	seq        uint64
-	lock       sync.RWMutex
+	pixels        []PixelWrite
+	nextUserWrite map[string]time.Time
+	seq           uint64
+	lock          sync.RWMutex
 }
 
 func NewMemoryStore() *MemoryStore {
@@ -61,39 +60,41 @@ func NewMemoryStore() *MemoryStore {
 			pixels[i*Size+j] = PixelWrite{Pixel: Pixel{X: i, Y: j, C: White}}
 		}
 	}
-	return &MemoryStore{pixels: pixels, userWrites: map[string]int{}}
+	return &MemoryStore{pixels: pixels, nextUserWrite: map[string]time.Time{}}
 }
 
 func (s *MemoryStore) Set(p Pixel, userID string) (*PixelWrite, error) {
 	now := time.Now()
-	if ind, ok := s.userWrites[userID]; ok {
-		log.Println("User write found " + userID)
-		w := s.pixels[ind]
-		cooldownEndsAt := w.WrittenAt.Add(cooldownPeriod)
-		if time.Now().After(cooldownEndsAt) {
-			log.Println(w, cooldownEndsAt)
-			return nil, UserRateLimitedError(fmt.Errorf("Cooldown period has not passed, wait %s", cooldownEndsAt.Sub(now)))
+	s.lock.RLock()
+	if nextWrite, ok := s.nextUserWrite[userID]; ok {
+		if time.Now().Before(nextWrite) {
+			s.lock.RUnlock()
+			return nil, UserRateLimitedError(fmt.Errorf("Cooldown period has not passed, wait %s", nextWrite.Sub(now)))
 		}
 	}
+	s.lock.RUnlock()
 	ind := p.Y*Size + p.X
 	seq := atomic.AddUint64(&s.seq, 1)
 	pw := PixelWrite{Pixel: p, Sequence: seq, UserID: userID, WrittenAt: now}
 	s.lock.Lock()
 	s.pixels[ind] = pw
-	s.userWrites[userID] = ind
-	s.lock.Lock()
+	s.nextUserWrite[userID] = now.Add(cooldownPeriod)
+	s.lock.Unlock()
 	return &pw, nil
 }
 
 func (s *MemoryStore) Get(x, y int) *PixelWrite {
 	s.lock.RLock()
-	return &s.pixels[y*Size+x]
+	p := &s.pixels[y*Size+x]
 	s.lock.RUnlock()
+	return p
 }
 func (s *MemoryStore) GetImage() *image.NRGBA {
 	res := image.NewNRGBA(image.Rect(0, 0, Size, Size))
+	s.lock.RLock()
 	for i, pw := range s.pixels {
 		res.SetNRGBA(i%1000, i/1000, pw.Pixel.C)
 	}
+	s.lock.RUnlock()
 	return res
 }

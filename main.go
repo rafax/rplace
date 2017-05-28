@@ -39,9 +39,10 @@ func write(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		if _, ok := err.(img.UserRateLimitedError); ok {
 			w.WriteHeader(429)
-			log.Println("Cooldown served for u")
+		} else {
+			w.WriteHeader(500)
+			log.Println("Error when writing: ", err)
 		}
-		w.WriteHeader(500)
 		fmt.Fprint(w, err)
 		return
 	}

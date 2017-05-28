@@ -86,7 +86,7 @@ func Test_1M_parallel_writes(t *testing.T) {
 	wg.Wait()
 	secs := time.Now().Sub(start).Seconds()
 	t.Logf("1m writes in %v s", secs)
-	if secs > 1.0 {
-		t.Errorf("Expected to take less than a second, took %v seconds", secs)
+	if secs > 10.0 {
+		t.Errorf("Expected to take less than 10s, took %v seconds", secs)
 	}
 }
