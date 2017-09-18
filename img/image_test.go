@@ -61,6 +61,11 @@ func Test_toPng(t *testing.T) {
 
 func Test_1M_parallel_writes(t *testing.T) {
 	s := NewMemoryStore()
+	uids := []string{}
+	uidCount := 1000
+	for i := 0; i < uidCount; i++ {
+		uids = append(uids, strconv.Itoa(rand.Int()))
+	}
 	start := time.Now()
 	var wg sync.WaitGroup
 	wg.Add(10)
@@ -78,7 +83,7 @@ func Test_1M_parallel_writes(t *testing.T) {
 				case 3:
 					c = Black
 				}
-				s.Set(Pixel{X: rand.Int() % 1000, Y: rand.Int() % 1000, C: c}, strconv.Itoa(rand.Int()))
+				s.Set(Pixel{X: rand.Int() % 1000, Y: rand.Int() % 1000, C: c}, uids[i%uidCount])
 			}
 			wg.Done()
 		}()
